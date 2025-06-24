@@ -1,0 +1,38 @@
+[
+  {
+    "timestamp": "2025-06-22T22:48:36.599187",
+    "name": "Desconhecido",
+    "status": "NEGADO",
+    "confidence": 0.0
+  },
+  {
+    "timestamp": "2025-06-22T22:48:39.700798",
+    "name": "Desconhecido",
+    "status": "NEGADO",
+    "confidence": 0.0
+  },
+  {
+    "timestamp": "2025-06-22T22:48:41.534631",
+    "name": "Jonas",
+    "status": "PERMITIDO",
+    "confidence": 0.8572647571563721
+  },
+  {
+    "timestamp": "2025-06-22T22:48:42.750336",
+    "name": "Desconhecido",
+    "status": "NEGADO",
+    "confidence": 0.0
+  },
+  {
+    "timestamp": "2025-06-22T22:48:43.415404",
+    "name": "Quir",
+    "status": "PERMITIDO",
+    "confidence": 0.8519257307052612
+  },
+  {
+    "timestamp": "2025-06-22T22:48:45.788621",
+    "name": "Desconhecido",
+    "status": "NEGADO",
+    "confidence": 0.0
+  }
+]
