@@ -1,2 +1,0 @@
-Run 
-python app.py
