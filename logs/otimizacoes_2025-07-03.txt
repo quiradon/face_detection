@@ -1,0 +1,27 @@
+# Log de Otimizações - 03/07/2025
+
+## Novas Técnicas de Aumento de Dados Implementadas
+- Ajuste de gamma: Simula diferentes dispositivos de exibição/monitores
+- Simulação de exposição de câmera: Simula diferentes condições de iluminação e sensores
+- Combinação estratégica: Aplicação de gamma baixo com exposição alta para cenários realistas
+
+## Otimizações para Balancear Eficiência e Desempenho
+- Redução do número de variações de rotação (de 4 para 2 ângulos)
+- Adição de variações de gamma (2 configurações)
+- Adição de variações de exposição de câmera (2 configurações)
+- Adição de 1 variação combinada (gamma + exposição)
+
+Total de variações por imagem: 8 (vs. 7 anteriormente)
+- 1 imagem pré-processada base
+- 2 variações de rotação
+- 2 variações de gamma
+- 2 variações de exposição
+- 1 variação combinada (gamma + exposição)
+
+Este conjunto de ajustes introduz robustez contra variações em condições de iluminação e configurações de câmera, mantendo um equilíbrio entre o tamanho do modelo e a qualidade do reconhecimento.
+
+[15:41:05] Treinamento conclu�do: 192 imagens processadas com otimiza��es de gamma e exposi��o.
+
+[16:02:11] Treinamento conclu�do: 216 imagens processadas com otimiza��es de gamma e exposi��o.
+
+[20:01:50] Treinamento conclu�do: 264 imagens processadas com otimiza��es de gamma e exposi��o.

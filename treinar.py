@@ -22,6 +22,21 @@ def ajustar_brilho(imagem, fator):
     imagem_ajustada = imagem * fator
     return np.clip(imagem_ajustada, 0, 255).astype(np.uint8)
 
+def ajustar_gamma(imagem, gamma=1.0):
+    """Ajusta o gamma da imagem para simular diferentes condições de iluminação"""
+    inv_gamma = 1.0 / gamma
+    tabela = np.array([((i / 255.0) ** inv_gamma) * 255
+                      for i in range(256)]).astype(np.uint8)
+    return cv2.LUT(imagem, tabela)
+
+def simular_exposicao(imagem, exposicao=1.0):
+    """Simula diferentes exposições de câmera"""
+    # Evita divisão por zero
+    exposicao = max(0.1, exposicao)
+    # Aplica transformação logarítmica para simular exposição
+    imagem_exp = np.log1p(imagem * exposicao / 255.0) * (255.0 / np.log1p(exposicao))
+    return np.clip(imagem_exp, 0, 255).astype(np.uint8)
+
 def aplicar_filtro_bilateral(imagem):
     """Aplica filtro bilateral para reduzir ruído preservando bordas"""
     return cv2.bilateralFilter(imagem, 9, 75, 75)
@@ -40,15 +55,35 @@ def aumentar_dados(face_original):
     face_preprocessada = aplicar_clahe(face_preprocessada)
     faces_aumentadas.append(face_preprocessada)
     
-    # Gera variações com rotações
-    for angulo in [-7, -3, 3, 7]:
+    # Gera variações com rotações (limitado para não sobrecarregar)
+    for angulo in [-5, 5]:
         face_rotacionada = aplicar_rotacao(face_preprocessada, angulo)
         faces_aumentadas.append(face_rotacionada)
     
-    # Variações de brilho
-    for fator in [0.85, 1.15]:
-        face_brilho = ajustar_brilho(face_preprocessada, fator)
-        faces_aumentadas.append(face_brilho)
+    # Variações de gamma (simula diferentes tipos de dispositivos/monitores)
+    for gamma in [0.8, 1.2]:
+        face_gamma = ajustar_gamma(face_preprocessada, gamma)
+        faces_aumentadas.append(face_gamma)
+    
+    # Variações de exposição (simula diferentes condições de câmera)
+    for exp in [0.85, 1.25]:
+        face_exp = simular_exposicao(face_preprocessada, exp)
+        faces_aumentadas.append(face_exp)
+    
+    # Variação com combinação estratégica para cenários realistas
+    # Combinação de gamma baixo com exposição alta (cenário comum em ambientes reais)
+    face_combinada = simular_exposicao(ajustar_gamma(face_preprocessada, 0.85), 1.2)
+    faces_aumentadas.append(face_combinada)
+    
+    # Variações de gamma
+    for gamma in [0.8, 1.2]:
+        face_gamma = ajustar_gamma(face_preprocessada, gamma)
+        faces_aumentadas.append(face_gamma)
+    
+    # Simula diferentes exposições
+    for exposicao in [0.5, 1.5]:
+        face_exposicao = simular_exposicao(face_preprocessada, exposicao)
+        faces_aumentadas.append(face_exposicao)
     
     return faces_aumentadas
 
@@ -112,8 +147,8 @@ total_imagens = sum(len([f for f in os.listdir(os.path.join(path, d))
                     if os.path.isdir(os.path.join(path, d)))
 
 print(f"Total de imagens originais encontradas: {total_imagens}")
-print(f"Total de imagens após aumentação (7x): {total_imagens * 7}")
-print("\n1. Processando e aumentando imagens...")
+print(f"Total de imagens após aumentação (8x): {total_imagens * 8}")
+print("\n1. Processando e aumentando imagens com ajustes de gamma e exposição...")
 
 # Obtém as faces e IDs
 faces, ids, nomes = get_imagens_e_labels(path)
@@ -125,9 +160,9 @@ print("Isso pode levar alguns minutos, por favor aguarde...")
 reconhecedor = cv2.face.LBPHFaceRecognizer_create(
     radius=2,           # Raio menor para processamento mais rápido
     neighbors=8,        # Número padrão de pontos de amostra
-    grid_x=8,          # Grade padrão para eficiência
-    grid_y=8,          # Grade padrão para eficiência
-    threshold=110.0     # Mantém o limiar para confiabilidade
+    grid_x=8,           # Grade padrão para eficiência
+    grid_y=8,           # Grade padrão para eficiência
+    threshold=115.0     # Limiar ajustado para as novas variações de gamma e exposição
 )
 
 # Treina o reconhecedor
@@ -146,8 +181,15 @@ with open('nomes.json', 'w') as f:
     json.dump(nomes, f)
 print("✓ Mapeamento de nomes salvo em nomes.json")
 
-print("Treinamento concluído com sucesso!")
+# Registra as otimizações aplicadas
+import datetime
+with open(f'logs/otimizacoes_{datetime.datetime.now().strftime("%Y-%m-%d")}.txt', 'a') as f:
+    f.write(f"\n[{datetime.datetime.now().strftime('%H:%M:%S')}] Treinamento concluído: {len(faces)} imagens processadas com otimizações de gamma e exposição.\n")
+
+print("\nTreinamento concluído com sucesso!")
 print(f"Total de pessoas cadastradas: {len(nomes)}")
-print("Nomes cadastrados:")
+print(f"Total de imagens processadas após aumentação: {len(faces)}")
+print("Otimizações aplicadas: ajustes de gamma e exposição de câmera")
+print("\nNomes cadastrados:")
 for id_usuario, nome in nomes.items():
     print(f"ID {id_usuario}: {nome}")

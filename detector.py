@@ -54,8 +54,18 @@ def iniciar_reconhecimento():
         faces = face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5, minSize=(30, 30))
         
         for (x, y, w, h) in faces:
-            # Extrai a região da face
-            face_roi = gray[y:y+h, x:x+w]
+            # Expande a região do rosto em 10% para cada lado
+            expand_x = int(w * 0.1)
+            expand_y = int(h * 0.1)
+            
+            # Calcula novas coordenadas com a expansão, garantindo que não ultrapassem os limites da imagem
+            new_x = max(0, x - expand_x)
+            new_y = max(0, y - expand_y)
+            new_w = min(frame.shape[1] - new_x, w + 2 * expand_x)
+            new_h = min(frame.shape[0] - new_y, h + 2 * expand_y)
+            
+            # Extrai a região da face expandida
+            face_roi = gray[new_y:new_y+new_h, new_x:new_x+new_w]
             
             try:
                 # Aplica o mesmo pré-processamento usado no treinamento
@@ -92,20 +102,20 @@ def iniciar_reconhecimento():
                     status = "NEGADO"
                     registrar_log(nome, False)
                 
-                # Desenha o retângulo e textos
-                cv2.rectangle(frame, (x, y), (x+w, y+h), cor, 2)
+                # Desenha o retângulo e textos usando as coordenadas expandidas
+                cv2.rectangle(frame, (new_x, new_y), (new_x+new_w, new_y+new_h), cor, 2)
                 
                 # Mostra o nome e status
                 texto_status = f"Status: {status}"
-                cv2.putText(frame, texto_status, (x, y-10), fonte, 0.5, cor, 2)
+                cv2.putText(frame, texto_status, (new_x, new_y-10), fonte, 0.5, cor, 2)
                 
                 # Mostra o nome detectado
                 texto_nome = f"Nome: {nome}"
-                cv2.putText(frame, texto_nome, (x, y-25), fonte, 0.5, cor, 2)
+                cv2.putText(frame, texto_nome, (new_x, new_y-25), fonte, 0.5, cor, 2)
                 
                 # Mostra a pontuação de confiança
                 texto_confianca = f"Confianca: {confianca:.1f}"
-                cv2.putText(frame, texto_confianca, (x, y-40), fonte, 0.5, cor, 2)
+                cv2.putText(frame, texto_confianca, (new_x, new_y-40), fonte, 0.5, cor, 2)
                 
             except Exception as e:
                 print(f"Erro no reconhecimento: {str(e)}")
