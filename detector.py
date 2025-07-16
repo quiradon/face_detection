@@ -3,6 +3,155 @@ import json
 import datetime
 import os
 
+def preprocessar_face(face_img):
+    """
+    Aplica o mesmo pré-processamento usado no treinamento
+    Esta função garante consistência entre treinamento e detecção
+    """
+    # 1. Filtro bilateral para reduzir ruído preservando bordas
+    face_preprocessada = cv2.bilateralFilter(face_img, 9, 75, 75)
+    
+    # 2. CLAHE para melhorar o contraste adaptativo
+    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
+    face_preprocessada = clahe.apply(face_preprocessada)
+    
+    # 3. Equalização de histograma
+    face_preprocessada = cv2.equalizeHist(face_preprocessada)
+    
+    # 4. Normalização do contraste
+    face_preprocessada = cv2.normalize(face_preprocessada, None, 0, 255, cv2.NORM_MINMAX)
+    
+    return face_preprocessada
+
+def obter_nome_camera(camera_id):
+    """Tenta obter o nome da câmera usando diferentes métodos"""
+    try:
+        # Método 1: Usar propriedade do OpenCV (nem sempre funciona)
+        cap = cv2.VideoCapture(camera_id)
+        backend_name = cap.getBackendName()
+        cap.release()
+        
+        # Método 2: Usar wmi no Windows para obter informações mais detalhadas
+        try:
+            import wmi
+            c = wmi.WMI()
+            cameras = c.Win32_PnPEntity(ConfigManagerErrorCode=0)
+            
+            # Procura por dispositivos de câmera
+            camera_keywords = ['camera', 'webcam', 'imaging', 'video']
+            device_names = []
+            
+            for device in cameras:
+                if device.Name and any(keyword.lower() in device.Name.lower() for keyword in camera_keywords):
+                    device_names.append(device.Name)
+            
+            # Retorna o nome do dispositivo baseado no índice
+            if camera_id < len(device_names):
+                return device_names[camera_id]
+            
+        except ImportError:
+            # wmi não está disponível, tenta método alternativo
+            try:
+                import subprocess
+                result = subprocess.run(['powershell', '-Command', 
+                    'Get-PnpDevice | Where-Object {$_.Class -eq "Camera" -or $_.FriendlyName -like "*camera*" -or $_.FriendlyName -like "*webcam*"} | Select-Object -ExpandProperty FriendlyName'], 
+                    capture_output=True, text=True, timeout=5)
+                
+                if result.returncode == 0:
+                    device_names = [line.strip() for line in result.stdout.split('\n') if line.strip()]
+                    if camera_id < len(device_names):
+                        return device_names[camera_id]
+            except Exception:
+                pass
+        except Exception:
+            pass
+        
+        # Método 3: Nomes padrão baseados no backend
+        if 'DSHOW' in backend_name:
+            return f"DirectShow Camera {camera_id}"
+        elif 'MSMF' in backend_name:
+            return f"Media Foundation Camera {camera_id}"
+        else:
+            return f"Camera {camera_id} ({backend_name})"
+            
+    except Exception:
+        return f"Camera {camera_id}"
+
+def listar_cameras():
+    """Lista todas as câmeras disponíveis no sistema com seus nomes"""
+    print("🔍 Procurando câmeras disponíveis...")
+    cameras_disponiveis = []
+    cameras_info = {}
+    
+    # Testa até 10 câmeras (normalmente é suficiente)
+    for i in range(10):
+        cap = cv2.VideoCapture(i)
+        # Configura um timeout menor para acelerar a detecção
+        cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+        
+        if cap.read()[0]:
+            cameras_disponiveis.append(i)
+            
+            # Obtém informações da câmera
+            largura = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+            altura = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+            nome = obter_nome_camera(i)
+            
+            cameras_info[i] = {
+                'nome': nome,
+                'resolucao': f"{largura}x{altura}"
+            }
+            
+            print(f"📷 Câmera {i}: {nome} ({largura}x{altura})")
+        cap.release()
+    
+    return cameras_disponiveis, cameras_info
+
+def selecionar_camera():
+    """Permite ao usuário selecionar uma câmera da lista de câmeras disponíveis"""
+    cameras_disponiveis, cameras_info = listar_cameras()
+    
+    if not cameras_disponiveis:
+        print("❌ Nenhuma câmera encontrada no sistema!")
+        return None
+    
+    print(f"\n� Resumo das câmeras disponíveis:")
+    for cam_id in cameras_disponiveis:
+        info = cameras_info[cam_id]
+        print(f"   {cam_id}: {info['nome']} - {info['resolucao']}")
+    
+    while True:
+        try:
+            escolha = input(f"\n🎯 Digite o número da câmera que deseja usar (ou 'q' para sair): ")
+            
+            if escolha.lower() == 'q':
+                print("👋 Saindo...")
+                return None
+            
+            camera_id = int(escolha)
+            
+            if camera_id in cameras_disponiveis:
+                # Testa se a câmera ainda está funcionando
+                info = cameras_info[camera_id]
+                print(f"🔍 Testando {info['nome']}...")
+                cap = cv2.VideoCapture(camera_id)
+                ret, frame = cap.read()
+                cap.release()
+                
+                if ret:
+                    print(f"✅ {info['nome']} selecionada com sucesso!")
+                    return camera_id
+                else:
+                    print(f"❌ Erro: {info['nome']} não está respondendo. Tente outra.")
+            else:
+                print(f"❌ Câmera {camera_id} não está disponível. Escolha uma das opções: {cameras_disponiveis}")
+                
+        except ValueError:
+            print("❌ Por favor, digite um número válido ou 'q' para sair.")
+        except KeyboardInterrupt:
+            print("\n\n⚠️  Operação cancelada pelo usuário.")
+            return None
+
 def registrar_log(nome, acesso_permitido):
     # Cria o diretório de logs se não existir
     if not os.path.exists('logs'):
@@ -21,7 +170,7 @@ def registrar_log(nome, acesso_permitido):
     with open(arquivo_log, 'a', encoding='utf-8') as f:
         f.write(mensagem)
 
-def iniciar_reconhecimento():
+def iniciar_reconhecimento(camera_id=0):
     # Carrega o classificador para detecção facial
     face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
     
@@ -33,13 +182,26 @@ def iniciar_reconhecimento():
     with open('nomes.json', 'r') as f:
         nomes = json.load(f)
     
-    # Inicia a captura de vídeo
-    cap = cv2.VideoCapture(0)
+    # Inicia a captura de vídeo com a câmera selecionada
+    cap = cv2.VideoCapture(camera_id)
+    
+    # Verifica se a câmera foi aberta corretamente
+    if not cap.isOpened():
+        print(f"❌ Erro: Não foi possível abrir a câmera {camera_id}")
+        return False
+    
+    # Obtém informações da câmera
+    largura = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    altura = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    fps = int(cap.get(cv2.CAP_PROP_FPS))
+    
+    print(f"📹 Câmera {camera_id} configurada: {largura}x{altura} @ {fps}fps")
     
     # Configura a fonte para o texto na tela
     fonte = cv2.FONT_HERSHEY_SIMPLEX
     
-    print("Pressione 'q' para sair")
+    print("🎯 Reconhecimento facial ativo!")
+    print("💡 Pressione 'q' para sair\n")
     
     while True:
         ret, frame = cap.read()
@@ -68,10 +230,8 @@ def iniciar_reconhecimento():
             face_roi = gray[new_y:new_y+new_h, new_x:new_x+new_w]
             
             try:
-                # Aplica o mesmo pré-processamento usado no treinamento
-                face_roi = cv2.equalizeHist(face_roi)
-                face_roi = cv2.GaussianBlur(face_roi, (5, 5), 0)
-                face_roi = cv2.normalize(face_roi, None, 0, 255, cv2.NORM_MINMAX)
+                # Aplica o MESMO pré-processamento usado no treinamento
+                face_roi = preprocessar_face(face_roi)
                 
                 # Tenta reconhecer a face
                 id_previsto, confianca = reconhecedor.predict(face_roi)
@@ -85,16 +245,12 @@ def iniciar_reconhecimento():
                     cor = (0, 0, 255)  # Vermelho
                     status = "ERRO - Reconhecimento falhou"
                     registrar_log(nome, False)
-                elif confianca < 30:  # Reconhecimento muito confiável
-                    cor = (0, 255, 0)  # Verde
-                    status = "PERMITIDO (Alta Confiança)"
-                    registrar_log(nome, True)
                 elif confianca < 50:  # Reconhecimento bom
                     cor = (0, 255, 128)  # Verde claro
-                    status = "PERMITIDO"
+                    status = "PERMITIDO (Fiel)"
                     registrar_log(nome, True)
                 elif confianca < 70:  # Reconhecimento aceitável
-                    cor = (0, 255, 255)  # Amarelo
+                    cor = (0, 255, 0)  # Amarelo
                     status = "PERMITIDO (Verificar)"
                     registrar_log(nome, True)
                 else:  # Reconhecimento duvidoso
@@ -130,9 +286,33 @@ def iniciar_reconhecimento():
     # Libera os recursos
     cap.release()
     cv2.destroyAllWindows()
+    return True
 
 if __name__ == "__main__":
     try:
-        iniciar_reconhecimento()
+        print("🚀 === Sistema de Reconhecimento Facial ===")
+        print("📋 Iniciando configuração de câmera...\n")
+        
+        # Seleciona a câmera
+        camera_id = selecionar_camera()
+        
+        if camera_id is not None:
+            print(f"\n🎬 Iniciando reconhecimento com câmera {camera_id}...")
+            print("💡 Pressione 'q' para sair do reconhecimento")
+            print("⚡ Carregando modelos...\n")
+            
+            sucesso = iniciar_reconhecimento(camera_id)
+            
+            if not sucesso:
+                print("❌ Falha ao iniciar o reconhecimento facial.")
+            else:
+                print("✅ Reconhecimento facial encerrado com sucesso.")
+        else:
+            print("⚠️  Operação cancelada.")
+            
     except Exception as e:
-        print(f"Erro ao iniciar o reconhecimento: {str(e)}")
+        print(f"❌ Erro ao iniciar o reconhecimento: {str(e)}")
+    except KeyboardInterrupt:
+        print("\n\n⚠️  Programa interrompido pelo usuário.")
+    
+    print("\n👋 Sistema encerrado.")
